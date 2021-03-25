@@ -1,5 +1,7 @@
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 
 module Main (main) where
 
@@ -16,20 +18,22 @@ import qualified Data.Vector as V
 import qualified Data.Vector.Algorithms.Merge as V
 import qualified Data.Vector.Unboxed as UV
 import qualified Data.Vector.Storable as SV
-import qualified Data.Massiv.Array as M
 import           System.Directory
 import           System.Random
 
-data Conser = forall f. NFData (f Int) => Conser String (Int -> IO (f Int)) (Int -> f Int -> f Int)
-data Append = forall f. NFData (f Int) => Append String (Int -> IO (f Int)) (f Int -> f Int -> f Int) (f Int -> f Int)
-data Replicator = forall f. NFData (f Int) => Replicator String (Int -> Int -> f Int)
-data Indexing = forall f. NFData (f Int) => Indexing String (IO (f Int)) (f Int -> Int -> Int)
-data Length = forall f. NFData (f Int) => Length String (Int -> IO (f Int)) (f Int -> Int)
-data Min = forall f. NFData (f Int) => Min String (Int -> IO (f Int)) (f Int -> Int)
-data Max = forall f. NFData (f Int) => Max String (Int -> IO (f Int)) (f Int -> Int)
-data Sort = forall f. NFData (f Int) => Sort String (Int -> IO (f Int)) (f Int -> f Int)
-data RemoveElement = forall f. NFData (f Int) => RemoveElement String (IO (f Int)) ((Int -> Bool) -> f Int -> f Int)
-data RemoveByIndex = forall f. NFData (f Int) => RemoveByIndex String (IO (f Int)) ((Int -> Int -> Bool) -> f Int -> f Int)
+import qualified Int.FingerTree as UF
+import qualified HaskellWorks.Data.FingerTree as F
+
+data Conser = forall fInt. NFData fInt => Conser String (Int -> IO fInt) (Int -> fInt -> fInt)
+data Append = forall fInt. NFData fInt => Append String (Int -> IO fInt) (fInt -> fInt -> fInt) (fInt -> fInt)
+data Replicator = forall fInt. NFData fInt => Replicator String (Int -> Int -> fInt)
+data Indexing = forall fInt. NFData fInt => Indexing String (IO fInt) (fInt -> Int -> Int)
+data Length = forall fInt. NFData fInt => Length String (Int -> IO fInt) (fInt -> Int)
+data Min = forall fInt. NFData fInt => Min String (Int -> IO fInt) (fInt -> Int)
+data Max = forall fInt. NFData fInt => Max String (Int -> IO fInt) (fInt -> Int)
+data Sort = forall fInt. NFData fInt => Sort String (Int -> IO fInt) (fInt -> fInt)
+data RemoveElement = forall fInt. NFData fInt => RemoveElement String (IO fInt) ((Int -> Bool) -> fInt -> fInt)
+data RemoveByIndex = forall fInt. NFData fInt => RemoveByIndex String (IO fInt) ((Int -> Int -> Bool) -> fInt -> fInt)
 
 main :: IO ()
 main = do
@@ -38,34 +42,41 @@ main = do
   when exists (removeFile fp)
   defaultMainWith
     defaultConfig {csvFile = Just fp}
+    {-
     [ bgroup
         "Consing"
         (conses
            [ Conser "Data.List" sampleList (:)
-           , Conser "Data.Vector" sampleVector V.cons
-           , Conser "Data.Vector.Unboxed" sampleUVVector UV.cons
-           , Conser "Data.Vector.Storable" sampleSVVector SV.cons
+           --, Conser "Data.Vector" sampleVector V.cons
+           --, Conser "Data.Vector.Unboxed" sampleUVVector UV.cons
+           --, Conser "Data.Vector.Storable" sampleSVVector SV.cons
            , Conser "Data.Sequence" sampleSeq (S.<|)
+           , Conser "UnpackedFingerTree" sampleUnpackedFingerTree (UF.<|)
+           , Conser "FingerTree" sampleFingerTree (F.<|)
            ])
-    , bgroup
+    -}
+    [ bgroup
         "Indexing"
         (let size = 10005
          in indexes
-              [ Indexing "Data.List" (sampleList size) (L.!!)
-              , Indexing "Data.Vector" (sampleVector size) (V.!)
-              , Indexing "Data.Vector.Unboxed" (sampleUVVector size) (UV.!)
-              , Indexing "Data.Vector.Storable" (sampleSVVector size) (SV.!)
-              , Indexing "Data.Sequence" (sampleSeq size) (S.index)
-              , Indexing "Data.Massiv.Array" (sampleMassivUArray size) (M.index')
+           --   [ Indexing "Data.List" (sampleList size) (L.!!)
+           --   , Indexing "Data.Vector" (sampleVector size) (V.!)
+           --   , Indexing "Data.Vector.Unboxed" (sampleUVVector size) (UV.!)
+           --   , Indexing "Data.Vector.Storable" (sampleSVVector size) (SV.!)
+              [ Indexing "Data.Sequence" (sampleSeq size) (S.index)
+              , Indexing "UnpackedFingerTree" (sampleUnpackedFingerTree size) uftIndex
+           --   , Indexing "FingerTree" (sampleFingerTree size) ftIndex
               ])
     , bgroup
         "Append"
         (appends
            [ Append "Data.List" sampleList (<>) force
-           , Append "Data.Vector" sampleVector (<>) id
-           , Append "Data.Vector.Unboxed" sampleUVVector (<>) id
-           , Append "Data.Vector.Storable" sampleSVVector (<>) id
+           --, Append "Data.Vector" sampleVector (<>) id
+           --, Append "Data.Vector.Unboxed" sampleUVVector (<>) id
+           --, Append "Data.Vector.Storable" sampleSVVector (<>) id
            , Append "Data.Sequence" sampleSeq (<>) id
+           , Append "UnpackedFingerTree" sampleUnpackedFingerTree (<>) id
+           , Append "FingerTree" sampleFingerTree (<>) id
            ])
     , bgroup
         "Length"
@@ -75,7 +86,8 @@ main = do
            , Length "Data.Vector.Unboxed" sampleUVVector (UV.length)
            , Length "Data.Vector.Storable" sampleSVVector (SV.length)
            , Length "Data.Sequence" sampleSeq (S.length)
-           , Length "Data.Massiv.Array" sampleMassivUArray M.elemsCount
+           , Length "UnpackedFingerTree" sampleUnpackedFingerTree (getSum . UF.measureFingerTree)
+           , Length "FingerTree" sampleFingerTree (getSum . F.measure)
            ])
     , bgroup
         "Stable Sort"
@@ -102,7 +114,6 @@ main = do
            , Min "Data.Vector" (randomSampleVector) (V.minimum)
            , Min "Data.Vector.Unboxed" (randomSampleUVVector) (UV.minimum)
            , Min "Data.Vector.Storable" (randomSampleSVVector) (SV.minimum)
-           , Min "Data.Massiv.Array" randomSampleMassivUArray M.minimum
            ])
     , bgroup
         "Max"
@@ -111,7 +122,6 @@ main = do
            , Max "Data.Vector" randomSampleVector (V.maximum)
            , Max "Data.Vector.Unboxed" randomSampleUVVector (UV.maximum)
            , Max "Data.Vector.Storable" randomSampleSVVector (SV.maximum)
-           , Max "Data.Massiv.Array" randomSampleMassivUArray M.maximum           
            ])
     , bgroup
         "Filter Element"
@@ -253,10 +263,6 @@ randomSampleSVVector i = evaluate $ force $ SV.fromList (take i (randoms (mkStdG
 randomSampleSeq :: Int -> IO (S.Seq Int)
 randomSampleSeq i = evaluate $ force $ S.fromList (take i (randoms (mkStdGen 0) :: [Int]))
 
-randomSampleMassivUArray :: Int -> IO (M.Array M.U Int Int)
-randomSampleMassivUArray i = evaluate $ force ma where
-  ma = M.fromList M.Seq (take i (randoms (mkStdGen 0) :: [Int]))
-
 sampleList :: Int -> IO [Int]
 sampleList i = evaluate $ force [1..i]
 
@@ -272,7 +278,22 @@ sampleSVVector i = evaluate $ force $ SV.fromList [1..i]
 sampleSeq :: Int -> IO (S.Seq Int)
 sampleSeq i = evaluate $ force $ S.fromList [1..i]
 
-sampleMassivUArray :: Int -> IO (M.Array M.U Int Int)
-sampleMassivUArray i = evaluate $ force ma where
-  ma :: M.Array M.U Int Int
-  ma =  M.fromList M.Seq [1..i]
+sampleUnpackedFingerTree :: Int -> IO UF.FingerTree
+sampleUnpackedFingerTree i = evaluate $ force $ UF.fromList [1..i]
+
+sampleFingerTree :: Int -> IO (F.FingerTree (Sum Int) Int)
+sampleFingerTree i = evaluate $ force $ F.fromList [1..i]
+
+{-# INLINE ftIndex #-}
+uftIndex :: UF.FingerTree -> Int -> Int
+uftIndex ft i = case UF.lookupOrd (Sum i) ft of
+  Nothing -> error "lol"
+  Just x -> x
+
+ftIndex :: F.FingerTree (Sum Int) Int -> Int -> Int
+ftIndex ft i = case F.viewl (F.dropUntil (>= Sum i) ft) of
+  F.EmptyL -> error "lol"
+  x F.:< _ -> x
+
+instance F.Measured (Sum Int) Int where
+  measure _ = Sum 1
